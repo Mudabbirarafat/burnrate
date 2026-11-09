@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# Collected history and generated output: regenerable, and not something to
+# commit a snapshot of.
+*.db
+*.db-wal
+*.db-shm
+report.md

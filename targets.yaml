@@ -1,0 +1,69 @@
+# Services probed by burnrate.
+#
+# Everything listed here is something I built and run myself. The probe is a
+# single GET on a 60-second interval with a 10-second timeout: roughly 1,440
+# requests per target per day, which is well inside what these hosts serve
+# without noticing.
+
+probe:
+  interval_seconds: 60
+  timeout_seconds: 10
+  user_agent: "burnrate/0.1 (+https://github.com/Mudabbirarafat/burnrate)"
+  follow_redirects: true
+
+database: burnrate.db
+metrics_port: 9105
+
+# A window is ignored until it holds this many probes. See README,
+# "Quantisation": at 60s intervals a 5-minute window holds about 5 probes.
+min_samples: 3
+resolve_after: 2
+retention_days: 90
+
+targets:
+  - name: scholarly
+    url: https://scholarly-jet.vercel.app/
+    slo:
+      availability: 0.99
+      latency_ms: 1500
+      latency_objective: 0.95
+
+  - name: depwatch
+    url: https://depwatch-2oj2.onrender.com/
+    slo:
+      availability: 0.99
+      # Render's free tier stops the instance when idle, so the first request
+      # after a quiet spell pays a cold start. A 1.5s objective here would
+      # measure Render's billing model rather than anything I control, so the
+      # threshold is set where a warm response belongs and the cold starts are
+      # expected to show up as budget burn I can point at and explain.
+      latency_ms: 3000
+      latency_objective: 0.90
+
+  - name: cyberrun
+    url: https://cyberrun-tau.vercel.app/
+    slo:
+      availability: 0.99
+      latency_ms: 1500
+      latency_objective: 0.95
+
+  - name: portfolio
+    url: https://mudabbir-arafat.netlify.app/
+    slo:
+      availability: 0.99
+      latency_ms: 1500
+      latency_objective: 0.95
+
+  - name: icsf
+    url: https://icsf.in/
+    slo:
+      availability: 0.995
+      latency_ms: 2000
+      latency_objective: 0.95
+
+  - name: radiant
+    url: https://radiantfiresafety.com/
+    slo:
+      availability: 0.995
+      latency_ms: 2000
+      latency_objective: 0.95
