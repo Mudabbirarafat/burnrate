@@ -115,6 +115,7 @@ down". It is a blackbox: it sees what a visitor sees, and nothing else.
 ```bash
 pip install -e .
 python -m burnrate.cli run                 # probe on a schedule, serve /metrics
+python -m burnrate.cli run --for 300       # the same loop, five minutes of it
 python -m burnrate.cli once                # a single cycle, for cron or CI
 python -m burnrate.cli report -o report.md # SLIs, burn rates, incident timeline
 ```
@@ -129,10 +130,38 @@ Footprint is one Python process and one SQLite file. There is no cluster, no
 message broker and no time-series database, because the machine this was
 written on cannot host any of them.
 
+### Probing from GitHub Actions
+
+`.github/workflows/monitor.yml` runs the loop for five minutes every hour and
+keeps `burnrate.db` in the Actions cache between runs. That is a compromise
+and the README should say so rather than let the badge imply otherwise.
+
+A monitor wants to be a daemon. A cron entry that gets five minutes an hour
+builds a **sampled, bursty** history: about 120 probes per target per day
+instead of 1,440. The consequences are specific.
+
+- The 1-day / 2-hour ticket windows fill up fine. 120 samples a day is plenty
+  to say whether a service was up.
+- The 1-hour / 5-minute page windows only ever see the five samples taken
+  inside one run. Between runs they empty out, fall below `min_samples` and
+  stop being evaluated — so a fast burn that starts at :25 is not detected
+  until :17 the next hour, by which point it is the ticket rule that catches
+  it.
+- Scheduled workflows are best-effort. GitHub queues them behind everyone
+  else's `:00` cron, which is why this one fires at `:17`, and a busy hour can
+  skip a run entirely.
+- The cache is evictable. Seven days without a hit and the history starts
+  again from nothing.
+
+None of that makes the numbers wrong, because the alert engine refuses to
+judge a window holding fewer than `min_samples` probes: thin windows go quiet
+rather than going confidently wrong. It makes them **less sensitive**, which
+is the honest trade for not leaving a process running on a laptop.
+
 ## Tests
 
 ```bash
-pytest -q     # 77 tests, 0.3s, no network and no sleeping
+pytest -q     # 84 tests, 0.7s, no network and no sleeping
 ```
 
 Time is a parameter everywhere it matters, and the probe layer is exercised

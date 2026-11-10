@@ -1,7 +1,7 @@
 """Command line entry point.
 
     burnrate once      probe every target once, evaluate, exit
-    burnrate run       probe on a schedule until interrupted
+    burnrate run       probe on a schedule until interrupted, or --for a while
     burnrate report    print the markdown report from stored history
 
 `once` exists so the same code can run from cron or a scheduled CI job on a
@@ -53,17 +53,21 @@ def _cmd_once(config: Config) -> int:
     return 1 if failed else 0
 
 
-def _cmd_run(config: Config, serve_metrics: bool) -> int:
+def _cmd_run(config: Config, serve_metrics: bool, duration: float | None = None) -> int:
     metrics = Metrics() if serve_metrics else None
     with Storage(config.database) as storage:
         engine = AlertEngine(config, storage)
         if metrics is not None:
             metrics.serve(config.metrics_port)
             print(f"metrics on http://localhost:{config.metrics_port}/metrics")
+        until = "ctrl-c to stop" if duration is None else f"for {duration:g}s"
         print(
             f"probing {len(config.targets)} targets every {config.probe.interval_seconds}s "
-            f"into {config.database}; ctrl-c to stop"
+            f"into {config.database}; {until}"
         )
+        # monotonic, not wall clock: a clock step mid-run should not cut the
+        # window short or extend it.
+        deadline = None if duration is None else time.monotonic() + duration
         ticks = 0
         try:
             while True:
@@ -75,8 +79,15 @@ def _cmd_run(config: Config, serve_metrics: bool) -> int:
                     removed = storage.prune(time.time() - config.retention_days * 86400)
                     if removed:
                         print(f"  pruned {removed} probes older than {config.retention_days}d")
-                elapsed = time.monotonic() - started
-                time.sleep(max(0.0, config.probe.interval_seconds - elapsed))
+                # Checked after the tick, so --for 0 still probes once: a
+                # scheduled job that returned without probing would be a
+                # silent gap in the history rather than an error.
+                if deadline is not None and time.monotonic() >= deadline:
+                    break
+                wait = config.probe.interval_seconds - (time.monotonic() - started)
+                if deadline is not None:
+                    wait = min(wait, deadline - time.monotonic())
+                time.sleep(max(0.0, wait))
         except KeyboardInterrupt:
             print("\nstopped")
     return 0
@@ -94,6 +105,21 @@ def _cmd_report(config: Config, out: str | None) -> int:
     return 0
 
 
+def _positive_seconds(value: str) -> float:
+    """A duration argparse will reject rather than pass on as nonsense.
+
+    Zero is allowed and means one probe: `run --for 0` and `once` differ only
+    in that `run` keeps the metrics server and the prune schedule.
+    """
+    try:
+        seconds = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a number of seconds") from None
+    if seconds < 0:
+        raise argparse.ArgumentTypeError("a duration cannot be negative")
+    return seconds
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="burnrate", description=__doc__)
     parser.add_argument("-c", "--config", default="targets.yaml", help="config file (default: targets.yaml)")
@@ -109,6 +135,13 @@ def main(argv: list[str] | None = None) -> int:
 
     run = sub.add_parser("run", parents=[common], help="probe on a schedule until interrupted")
     run.add_argument("--no-metrics", action="store_true", help="do not start the /metrics server")
+    run.add_argument(
+        "--for",
+        dest="duration",
+        type=_positive_seconds,
+        metavar="SECONDS",
+        help="stop after this long instead of running until interrupted",
+    )
 
     rep = sub.add_parser("report", parents=[common], help="print the markdown report")
     rep.add_argument("-o", "--out", help="write to this file instead of stdout")
@@ -123,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "once":
         return _cmd_once(config)
     if args.command == "run":
-        return _cmd_run(config, serve_metrics=not args.no_metrics)
+        return _cmd_run(config, serve_metrics=not args.no_metrics, duration=args.duration)
     return _cmd_report(config, args.out)
 
 
