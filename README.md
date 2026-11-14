@@ -136,22 +136,53 @@ written on cannot host any of them.
 keeps `burnrate.db` in the Actions cache between runs. That is a compromise
 and the README should say so rather than let the badge imply otherwise.
 
-A monitor wants to be a daemon. A cron entry that gets five minutes an hour
-builds a **sampled, bursty** history: about 120 probes per target per day
-instead of 1,440. The consequences are specific.
+A monitor wants to be a daemon. A cron entry is not one, and it is worth
+being exact about how far short it falls, because the first version of this
+section was wrong.
 
-- The 1-day / 2-hour ticket windows fill up fine. 120 samples a day is plenty
-  to say whether a service was up.
-- The 1-hour / 5-minute page windows only ever see the five samples taken
-  inside one run. Between runs they empty out, fall below `min_samples` and
-  stop being evaluated — so a fast burn that starts at :25 is not detected
-  until :17 the next hour, by which point it is the ticket rule that catches
-  it.
-- Scheduled workflows are best-effort. GitHub queues them behind everyone
-  else's `:00` cron, which is why this one fires at `:17`, and a busy hour can
-  skip a run entirely.
+**What it asks for:** hourly, at `:17`.
+
+**What it got, measured over the first four days:** 14 runs. Intervals of
+five to nine hours, and not one of them at `:17`. GitHub's scheduled
+workflows are best-effort on a quiet public repository, and "best effort"
+turns out to mean roughly three and a half visits a day.
+
+That is the difference between the 120 probes per target per day this
+section used to claim and the **~17 it was actually getting**. The claim was
+arithmetic from the cron line; nobody had looked at the run list.
+
+Each visit now probes for fifteen minutes instead of five, which is the only
+lever available on this side of the arrangement — it cannot make the visits
+more frequent, only worth more when they happen. That takes it to roughly 50
+probes per target per day: still sampled and bursty, and now honestly
+labelled.
+
+The consequences are specific.
+
+- The 1-day / 2-hour ticket windows still fill. Fifty samples a day is
+  enough to say whether a service was up.
+- The 1-hour / 5-minute page windows only ever see samples from inside one
+  visit, and between visits they empty out, fall below `min_samples` and stop
+  being evaluated. With visits six hours apart, the page rule is decorative.
+  The ticket rule is the one that works here.
 - The cache is evictable. Seven days without a hit and the history starts
   again from nothing.
+
+### A probe from a datacentre is not a probe from a user
+
+On 14 November one of the targets failed **6 out of 6** probes with
+timeouts, having passed 6 out of 6 eight hours earlier. Checked by hand from
+a home connection minutes later it answered HTTP 200 in 234ms, then 141ms.
+
+So the site was almost certainly fine and the runner was almost certainly
+being refused: shared hosts block or throttle datacentre ranges routinely.
+This monitor cannot currently tell "down" from "would not talk to that IP",
+and that limitation belongs in writing rather than in a report that quietly
+accuses a working site of an outage. A run of timeouts from a single vantage
+point is a question, not a verdict — which is the same rule the link checker
+in another project applies to a 403.
+
+Fixing it properly needs a second vantage point, which this does not have.
 
 None of that makes the numbers wrong, because the alert engine refuses to
 judge a window holding fewer than `min_samples` probes: thin windows go quiet
