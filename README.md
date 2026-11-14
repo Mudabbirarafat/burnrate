@@ -10,14 +10,17 @@ regarding how much a 60-second prober is entitled to conclude.
 
 ## What it watches
 
-Six services I built and operate: two client sites in production, three
+Five services I built and operate: a client site in production, three
 deployed side projects, and my portfolio. Every target has its own objectives,
 because a free-tier container and a CDN-hosted static site do not deserve the
 same ones.
 
+Probing somebody else's production site is their call, not the monitor's.
+A target comes out the moment its owner would rather it were not there, and
+that is a one-line change by design.
+
 | target | what it is | availability SLO | latency SLO |
 |---|---|---|---|
-| `icsf` | awards-event site, live for a client | 99.5% | 95% under 2000 ms |
 | `radiant` | institute site, live for a client | 99.5% | 95% under 2000 ms |
 | `scholarly` | semantic search over arXiv abstracts | 99% | 95% under 1500 ms |
 | `depwatch` | dependency-advisory dashboard | 99% | 90% under 3000 ms |
@@ -31,7 +34,6 @@ scholarly                ok                    725ms  http 200
 depwatch                 FAIL (timeout)      10080ms  http -
 cyberrun                 ok                    142ms  http 200
 portfolio                ok                   1498ms  http 200
-icsf                     ok                    156ms  http 200
 radiant                  ok                    367ms  http 200
 ```
 

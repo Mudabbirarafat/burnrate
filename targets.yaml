@@ -54,13 +54,6 @@ targets:
       latency_ms: 1500
       latency_objective: 0.95
 
-  - name: icsf
-    url: https://icsf.in/
-    slo:
-      availability: 0.995
-      latency_ms: 2000
-      latency_objective: 0.95
-
   - name: radiant
     url: https://radiantfiresafety.com/
     slo:
